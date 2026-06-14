@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Physiot — ตารางเรียนภาควิชา</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header__brand">
+        <div class="header__logo">PT</div>
+        <div>
+          <h1>Physiot Schedule</h1>
+          <p class="header__subtitle">ตารางเรียนภาควิชากายภาพบำบัด</p>
+        </div>
+      </div>
+      <div class="header__controls">
+        <button type="button" class="btn btn--ghost" id="btnPrevMonth" aria-label="เดือนก่อนหน้า">‹</button>
+        <div class="month-picker">
+          <span id="monthLabel" class="month-picker__label"></span>
+        </div>
+        <button type="button" class="btn btn--ghost" id="btnNextMonth" aria-label="เดือนถัดไป">›</button>
+        <button type="button" class="btn btn--primary" id="btnAddClass">+ เพิ่มวิชา</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="legend">
+        <span class="legend__item"><span class="dot dot--lecture"></span> บรรยาย</span>
+        <span class="legend__item"><span class="dot dot--lab"></span> แล็บ / ปฏิบัติ</span>
+        <span class="legend__item"><span class="dot dot--task"></span> มีงานที่ต้องทำ</span>
+      </section>
+
+      <section class="schedule-wrap">
+        <div class="schedule-grid" id="scheduleGrid"></div>
+      </section>
+
+      <aside class="sidebar">
+        <div class="sidebar__card">
+          <h2>งานที่ใกล้ถึงกำหนด</h2>
+          <ul class="task-list" id="upcomingTasks"></ul>
+          <p class="empty-state" id="noTasksMsg">ยังไม่มีงานที่บันทึกไว้</p>
+        </div>
+        <div class="sidebar__card sidebar__card--hint">
+          <h3>วิธีใช้</h3>
+          <ul class="hint-list">
+            <li>คลิกช่องในตารางเพื่อเพิ่ม/แก้ไขวิชา</li>
+            <li>กดปุ่ม <strong>+ เพิ่มวิชา</strong> เพื่อเพิ่มรายวิชาใหม่</li>
+            <li>เพิ่มงาน/แล็บในแต่ละวิชา — ระบบจะแจ้งเตือน popup</li>
+            <li>ข้อมูลบันทึกอัตโนมัติในเบราว์เซอร์</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- Modal: วิชา -->
+  <dialog class="modal" id="classModal">
+    <form class="modal__form" id="classForm">
+      <div class="modal__header">
+        <h2 id="classModalTitle">เพิ่มวิชา</h2>
+        <button type="button" class="modal__close" id="closeClassModal" aria-label="ปิด">×</button>
+      </div>
+      <div class="modal__body">
+        <input type="hidden" id="classId" />
+        <div class="form-row">
+          <label for="courseName">ชื่อวิชา</label>
+          <input type="text" id="courseName" placeholder="เช่น กายวิภาคศาสตร์ I" required />
+        </div>
+        <div class="form-row form-row--2">
+          <div>
+            <label for="courseDay">วัน</label>
+            <select id="courseDay" required></select>
+          </div>
+          <div>
+            <label for="courseType">ประเภท</label>
+            <select id="courseType">
+              <option value="lecture">บรรยาย</option>
+              <option value="lab">แล็บ / ปฏิบัติ</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row form-row--2">
+          <div>
+            <label for="courseStart">เวลาเริ่ม</label>
+            <select id="courseStart" required></select>
+          </div>
+          <div>
+            <label for="courseEnd">เวลาสิ้นสุด</label>
+            <select id="courseEnd" required></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="courseLocation">สถานที่เรียน</label>
+          <input type="text" id="courseLocation" placeholder="เช่น ห้อง 301 อาคาร A" />
+        </div>
+        <div class="form-row">
+          <label for="courseNote">หมายเหตุ</label>
+          <textarea id="courseNote" rows="2" placeholder="อาจารย์ผู้สอน, หนังสือที่ต้องเตรียม ฯลฯ"></textarea>
+        </div>
+
+        <div class="tasks-section">
+          <div class="tasks-section__header">
+            <h3>งาน / แล็บ / การบ้าน</h3>
+            <button type="button" class="btn btn--sm btn--secondary" id="btnAddTask">+ เพิ่มงาน</button>
+          </div>
+          <div id="tasksContainer"></div>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--danger" id="btnDeleteClass" hidden>ลบวิชา</button>
+        <div class="modal__footer-right">
+          <button type="button" class="btn btn--ghost" id="cancelClassModal">ยกเลิก</button>
+          <button type="submit" class="btn btn--primary">บันทึก</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal: งาน -->
+  <dialog class="modal modal--sm" id="taskModal">
+    <form class="modal__form" id="taskForm">
+      <div class="modal__header">
+        <h2>เพิ่มงาน</h2>
+        <button type="button" class="modal__close" id="closeTaskModal" aria-label="ปิด">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="form-row">
+          <label for="taskTitle">ชื่องาน</label>
+          <input type="text" id="taskTitle" placeholder="เช่น แล็บวัด ROM, ส่งรายงาน" required />
+        </div>
+        <div class="form-row">
+          <label for="taskDetail">รายละเอียด</label>
+          <textarea id="taskDetail" rows="3" placeholder="อาจารย์สั่งอะไร, ต้องเตรียมอะไร"></textarea>
+        </div>
+        <div class="form-row">
+          <label for="taskDue">กำหนดส่ง (ไม่บังคับ)</label>
+          <input type="date" id="taskDue" />
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" id="cancelTaskModal">ยกเลิก</button>
+        <button type="submit" class="btn btn--primary">เพิ่มงาน</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Popup แจ้งเตือน -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

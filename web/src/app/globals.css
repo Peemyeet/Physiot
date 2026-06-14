@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-plex-thai), system-ui, sans-serif;
+
+  /* KMITL CI — orange #E35205 on white / gray / black neutrals */
+  --color-bg: #ffffff;
+  --color-bg-soft: #fafafa;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f3f4;
+  --color-border: #e2e2e5;
+  --color-border-soft: #ececef;
+  --color-text: #1a1a1a;
+  --color-muted: #666666;
+  --color-primary: #e35205;
+  --color-primary-soft: #ff6a2b;
+  --color-gold: #e35205;
+  --color-gold-soft: #ff8a47;
+  --color-lecture: #5b6fd6;
+  --color-lab: #1fa882;
+  --color-both: #0ea5c9;
+  --color-task: #d97706;
+  --color-danger: #dc2626;
+
+  --animate-float: float 8s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-18px) translateX(10px);
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(58rem 30rem at 82% -12%, rgba(227, 82, 5, 0.06), transparent 60%),
+    radial-gradient(46rem 28rem at 8% 4%, rgba(227, 82, 5, 0.04), transparent 55%),
+    var(--color-bg);
+  color: var(--color-text);
+}
+
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-border) 80%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+  background-clip: padding-box;
+}
+
+@utility glass {
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}

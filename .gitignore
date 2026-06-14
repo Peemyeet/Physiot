@@ -1,0 +1,23 @@
+.DS_Store
+*.pem
+*.log
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# Next.js (web/)
+web/node_modules/
+web/.next/
+web/out/
+web/build/
+web/.vercel/
+web/*.tsbuildinfo
+
+# Go
+server/data.json
+
+# IDE
+.idea/
+.vscode/

@@ -6,6 +6,7 @@
 .env
 .env.*
 !.env.example
+web/.env.local
 
 # Next.js (web/)
 web/node_modules/
@@ -21,3 +22,7 @@ server/data.json
 # IDE
 .idea/
 .vscode/
+
+# Vercel
+.vercel/
+.vercel

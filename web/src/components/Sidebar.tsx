@@ -1,12 +1,16 @@
 "use client";
 
 import { formatDateThai } from "@/lib/schedule";
-import type { ClassItem, Exam } from "@/lib/types";
+import { isTaskDoneBy, isTaskPendingForTeam } from "@/lib/sharedTasks";
+import type { Exam, SharedTask } from "@/lib/types";
+import { allStudents, type StudentUser } from "@/lib/users";
 
 interface Props {
-  classes: ClassItem[];
   exams: Exam[];
+  sharedTasks: SharedTask[];
+  currentUserId: string;
   onOpenCourse: (id: string) => void;
+  onToggleTask: (taskId: string, done: boolean) => void;
 }
 
 function daysUntil(iso: string): number {
@@ -16,11 +20,43 @@ function daysUntil(iso: string): number {
   return Math.round((d.getTime() - today.getTime()) / 86400000);
 }
 
-export default function Sidebar({ classes, exams, onOpenCourse }: Props) {
-  const tasks = classes
-    .flatMap((c) => c.tasks.map((t) => ({ ...t, courseName: c.name, courseId: c.id })))
+function MemberStatus({ members, task }: { members: StudentUser[]; task: SharedTask }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-1">
+      {members.map((m) => {
+        const done = isTaskDoneBy(task, m.id);
+        return (
+          <span
+            key={m.id}
+            title={done ? `${m.nickname} ส่งแล้ว` : `${m.nickname} ยังไม่ส่ง`}
+            className={`rounded-md px-1.5 py-0.5 text-[0.62rem] font-medium ${
+              done
+                ? "bg-lab/20 text-lab"
+                : "bg-danger/15 text-danger ring-1 ring-danger/30"
+            }`}
+          >
+            {done ? "✓" : "○"} {m.nickname}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Sidebar({
+  exams,
+  sharedTasks,
+  currentUserId,
+  onOpenCourse,
+  onToggleTask,
+}: Props) {
+  const members = allStudents();
+  const memberIds = members.map((m) => m.id);
+
+  const pendingTasks = sharedTasks
+    .filter((t) => isTaskPendingForTeam(t, memberIds))
     .sort((a, b) => {
-      if (!a.due && !b.due) return 0;
+      if (!a.due && !b.due) return b.createdAt.localeCompare(a.createdAt);
       if (!a.due) return 1;
       if (!b.due) return -1;
       return a.due.localeCompare(b.due);
@@ -34,26 +70,60 @@ export default function Sidebar({ classes, exams, onOpenCourse }: Props) {
     <aside className="flex flex-col gap-4">
       <div className="glass rounded-2xl p-5">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-          <span>📌</span> งานที่ใกล้ถึงกำหนด
+          <span>📋</span> งานค้าง
         </h2>
-        {tasks.length === 0 ? (
-          <p className="text-sm text-muted">ยังไม่มีงานที่บันทึกไว้ — คลิกที่วิชาเพื่อเพิ่มงาน</p>
+        {pendingTasks.length === 0 ? (
+          <p className="text-sm text-muted">
+            ไม่มีงานค้าง — คลิกที่วิชาแล้วกด &quot;+ เพิ่มงาน&quot;
+          </p>
         ) : (
           <ul className="-my-1 divide-y divide-border">
-            {tasks.slice(0, 8).map((t) => (
-              <li key={t.id}>
-                <button
-                  onClick={() => onOpenCourse(t.courseId)}
-                  className="w-full cursor-pointer py-3 text-left transition hover:opacity-80"
-                >
-                  <div className="text-sm font-medium">{t.title}</div>
-                  <div className="text-xs text-muted">{t.courseName}</div>
-                  {t.due && (
-                    <div className="mt-0.5 text-xs text-task">📅 {formatDateThai(t.due)}</div>
+            {pendingTasks.map((t) => {
+              const mineDone = isTaskDoneBy(t, currentUserId);
+              const notDone = members.filter((m) => !isTaskDoneBy(t, m.id));
+              return (
+                <li key={t.id} className="py-3">
+                  <button
+                    type="button"
+                    onClick={() => onOpenCourse(t.classId)}
+                    className="w-full cursor-pointer text-left transition hover:opacity-80"
+                  >
+                    <div className="text-sm font-medium">{t.title}</div>
+                    <div className="text-xs text-muted">{t.courseName}</div>
+                    {t.due && (
+                      <div className="mt-0.5 text-xs text-task">
+                        📅 {formatDateThai(t.due)}
+                        {daysUntil(t.due) >= 0 && daysUntil(t.due) <= 3 && (
+                          <span className="ml-1 text-danger">
+                            ({daysUntil(t.due) === 0 ? "วันนี้!" : `อีก ${daysUntil(t.due)} วัน`})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+
+                  <MemberStatus members={members} task={t} />
+
+                  {notDone.length > 0 && (
+                    <p className="mt-1.5 text-[0.65rem] text-danger">
+                      ยังไม่ส่ง: {notDone.map((m) => m.nickname).join(", ")}
+                    </p>
                   )}
-                </button>
-              </li>
-            ))}
+
+                  <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={mineDone}
+                      onChange={(e) => onToggleTask(t.id, e.target.checked)}
+                      className="size-4 rounded border-border accent-primary"
+                    />
+                    <span className={mineDone ? "text-lab" : "text-text"}>
+                      {mineDone ? "ฉันส่งแล้ว ✓" : "ติ๊กเมื่อส่งงานแล้ว"}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -101,9 +171,9 @@ export default function Sidebar({ classes, exams, onOpenCourse }: Props) {
         <h3 className="mb-2 text-sm font-semibold">วิธีใช้</h3>
         <ul className="list-disc space-y-1.5 pl-5 text-xs text-muted">
           <li>คลิกการ์ดวิชาเพื่อดูรายละเอียด/เพิ่มงาน</li>
-          <li>คลิกช่องว่างเพื่อเพิ่มวิชาเอง</li>
-          <li>เพิ่มงาน/แล็บ — ระบบจะเด้ง popup แจ้งเตือน</li>
-          <li>ข้อมูลบันทึกอัตโนมัติ</li>
+          <li>งานที่เพิ่มจะเห็นร่วมกันทุกคน</li>
+          <li>ติ๊กใน sidebar เมื่อส่งงานแล้ว</li>
+          <li>ดูได้ว่าใครยังไม่ส่งเพื่อตามเพื่อน</li>
         </ul>
       </div>
     </aside>

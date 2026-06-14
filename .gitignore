@@ -19,6 +19,10 @@ web/*.tsbuildinfo
 # Go
 server/data.json
 
+# Shared task dev store
+web/.data/
+.data/
+
 # IDE
 .idea/
 .vscode/

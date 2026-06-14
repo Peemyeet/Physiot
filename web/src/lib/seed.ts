@@ -1,4 +1,5 @@
 import type { ClassItem, Exam } from "./types";
+import { USER_OVERRIDES } from "./users";
 
 /**
  * ตารางเรียนฟิกตลอดภาคเรียนที่ 1/2569
@@ -346,6 +347,14 @@ export const EXAMS: Exam[] = [
   },
 ];
 
-export function freshFixedClasses(): ClassItem[] {
-  return FIXED_CLASSES.map((c) => ({ ...c, tasks: c.tasks.map((t) => ({ ...t })) }));
+export function freshFixedClasses(userId: string): ClassItem[] {
+  const overrides = USER_OVERRIDES[userId] ?? [];
+  return FIXED_CLASSES.map((c) => {
+    const copy: ClassItem = { ...c, tasks: c.tasks.map((t) => ({ ...t })) };
+    const ov = overrides.find((o) => o.id === c.id);
+    if (!ov) return copy;
+    if (ov.hidden) return null;
+    const { hidden: _, ...rest } = ov;
+    return { ...copy, ...rest, tasks: copy.tasks };
+  }).filter((c): c is ClassItem => c !== null);
 }

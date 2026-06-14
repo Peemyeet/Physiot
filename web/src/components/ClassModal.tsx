@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import TaskModal from "./TaskModal";
 import {
@@ -11,15 +11,23 @@ import {
   timeToMinutes,
   uid,
 } from "@/lib/schedule";
-import type { ClassItem, ClassType, Task } from "@/lib/types";
+import { isTaskDoneBy, tasksForClass } from "@/lib/sharedTasks";
+import type { ClassItem, ClassType, SharedTask, Task } from "@/lib/types";
+import { allStudents } from "@/lib/users";
 
 interface Props {
   open: boolean;
   initial: ClassItem | null;
   defaults?: { day?: string; start?: string };
+  sharedTasks: SharedTask[];
+  currentUserId: string;
+  currentUserName: string;
   onClose: () => void;
   onSave: (cls: ClassItem, isNew: boolean) => void;
   onDelete: (id: string) => void;
+  onAddSharedTask: (task: SharedTask) => void;
+  onDeleteSharedTask: (id: string) => void;
+  onToggleSharedTask: (taskId: string, done: boolean) => void;
   onTaskAdded: (task: Task, courseName: string) => void;
 }
 
@@ -46,17 +54,26 @@ export default function ClassModal({
   open,
   initial,
   defaults,
+  sharedTasks,
+  currentUserId,
+  currentUserName,
   onClose,
   onSave,
   onDelete,
+  onAddSharedTask,
+  onDeleteSharedTask,
+  onToggleSharedTask,
   onTaskAdded,
 }: Props) {
+  const [classId, setClassId] = useState(() => initial?.id ?? uid());
   const [form, setForm] = useState(emptyForm());
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [taskOpen, setTaskOpen] = useState(false);
+
+  const members = allStudents();
 
   useEffect(() => {
     if (!open) return;
+    setClassId(initial?.id ?? uid());
     if (initial) {
       setForm({
         name: initial.name,
@@ -67,28 +84,42 @@ export default function ClassModal({
         location: initial.location,
         note: initial.note,
       });
-      setTasks([...initial.tasks]);
     } else {
       setForm(emptyForm(defaults));
-      setTasks([]);
     }
   }, [open, initial, defaults]);
+
+  const classTasks = useMemo(
+    () => tasksForClass(sharedTasks, classId),
+    [sharedTasks, classId]
+  );
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   const handleAddTask = (task: Task) => {
-    setTasks((prev) => [...prev, task]);
-    onTaskAdded(task, form.name.trim() || "วิชาใหม่");
+    const courseName = form.name.trim() || "วิชาใหม่";
+    const shared: SharedTask = {
+      id: task.id,
+      classId,
+      courseName,
+      title: task.title,
+      detail: task.detail,
+      due: task.due,
+      createdBy: currentUserId,
+      createdByName: currentUserName,
+      createdAt: new Date().toISOString(),
+      doneBy: Object.fromEntries(members.map((m) => [m.id, false])),
+    };
+    onAddSharedTask(shared);
+    onTaskAdded(task, courseName);
   };
-
-  const removeTask = (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id));
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (timeToMinutes(form.end) <= timeToMinutes(form.start)) return;
     const cls: ClassItem = {
-      id: initial?.id ?? uid(),
+      id: classId,
       name: form.name.trim(),
       day: form.day,
       type: form.type,
@@ -96,12 +127,13 @@ export default function ClassModal({
       end: form.end,
       location: form.location.trim(),
       note: form.note.trim(),
-      tasks,
+      tasks: [],
     };
     onSave(cls, !initial);
   };
 
   const timeInvalid = timeToMinutes(form.end) <= timeToMinutes(form.start);
+  const canAddTask = !!initial || !!form.name.trim();
 
   return (
     <>
@@ -218,44 +250,75 @@ export default function ClassModal({
 
             <div className="border-t border-border pt-4">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">งาน / แล็บ / การบ้าน</h3>
+                <div>
+                  <h3 className="text-sm font-semibold">งาน / แล็บ / การบ้าน</h3>
+                  <p className="mt-0.5 text-[0.65rem] text-muted">เห็นร่วมกันทุกคน</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setTaskOpen(true)}
-                  className="cursor-pointer rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium transition hover:bg-border"
+                  disabled={!canAddTask}
+                  className="cursor-pointer rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium transition hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   + เพิ่มงาน
                 </button>
               </div>
 
-              {tasks.length === 0 ? (
+              {!canAddTask && (
+                <p className="mb-2 text-xs text-muted">กรอกชื่อวิชาก่อนเพื่อเพิ่มงาน</p>
+              )}
+
+              {classTasks.length === 0 ? (
                 <p className="text-xs text-muted">ยังไม่มีงานในวิชานี้</p>
               ) : (
                 <div className="space-y-2">
-                  {tasks.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-start justify-between gap-2 rounded-xl border border-border bg-surface-2 px-3.5 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium">{t.title}</div>
-                        {t.detail && (
-                          <div className="mt-0.5 text-xs text-muted">{t.detail}</div>
-                        )}
-                        {t.due && (
-                          <div className="mt-1 text-xs text-task">📅 {formatDateThai(t.due)}</div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeTask(t.id)}
-                        className="cursor-pointer p-0.5 text-lg leading-none text-muted transition hover:text-danger"
-                        aria-label="ลบงาน"
+                  {classTasks.map((t) => {
+                    const mineDone = isTaskDoneBy(t, currentUserId);
+                    const pending = members.filter((m) => !isTaskDoneBy(t, m.id));
+                    return (
+                      <div
+                        key={t.id}
+                        className="rounded-xl border border-border bg-surface-2 px-3.5 py-2.5"
                       >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium">{t.title}</div>
+                            {t.detail && (
+                              <div className="mt-0.5 text-xs text-muted">{t.detail}</div>
+                            )}
+                            {t.due && (
+                              <div className="mt-1 text-xs text-task">
+                                📅 {formatDateThai(t.due)}
+                              </div>
+                            )}
+                            <div className="mt-1.5 text-[0.65rem] text-muted">
+                              เพิ่มโดย {t.createdByName}
+                              {pending.length > 0 && ` · ยังไม่ส่ง: ${pending.map((m) => m.nickname).join(", ")}`}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteSharedTask(t.id)}
+                            className="cursor-pointer p-0.5 text-lg leading-none text-muted transition hover:text-danger"
+                            aria-label="ลบงาน"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={mineDone}
+                            onChange={(e) => onToggleSharedTask(t.id, e.target.checked)}
+                            className="size-3.5 rounded border-border accent-primary"
+                          />
+                          <span className={mineDone ? "text-lab" : ""}>
+                            {mineDone ? "ส่งแล้ว" : "ติ๊กเมื่อส่งแล้ว"}
+                          </span>
+                        </label>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

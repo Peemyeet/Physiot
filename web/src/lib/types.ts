@@ -38,3 +38,17 @@ export interface Exam {
 export interface TermData {
   classes: ClassItem[];
 }
+
+/** งานค้างร่วมกันทั้งกลุ่ม — ใครเพิ่มก็เห็นทุกคน */
+export interface SharedTask {
+  id: string;
+  classId: string;
+  courseName: string;
+  title: string;
+  detail: string;
+  due: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  doneBy: Record<string, boolean>;
+}

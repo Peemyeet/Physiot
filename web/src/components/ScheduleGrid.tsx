@@ -10,10 +10,13 @@ import {
   classDurationSlots,
   timeToMinutes,
 } from "@/lib/schedule";
-import type { ClassItem, ClassType } from "@/lib/types";
+import type { ClassItem, ClassType, SharedTask } from "@/lib/types";
+import { allStudents } from "@/lib/users";
+import { pendingCountForClass } from "@/lib/sharedTasks";
 
 interface Props {
   classes: ClassItem[];
+  sharedTasks: SharedTask[];
   onAddAt: (day: string, start: string) => void;
   onEdit: (cls: ClassItem) => void;
   todayKey: string;
@@ -36,7 +39,8 @@ const TYPE_LABEL: Record<ClassType, string> = {
   both: "ทฤษฎี+ปฏิบัติ",
 };
 
-export default function ScheduleGrid({ classes, onAddAt, onEdit, todayKey }: Props) {
+export default function ScheduleGrid({ classes, sharedTasks, onAddAt, onEdit, todayKey }: Props) {
+  const memberIds = allStudents().map((m) => m.id);
   const gridRef = useRef<HTMLDivElement>(null);
   const [nowMin, setNowMin] = useState<number | null>(null);
 
@@ -174,7 +178,7 @@ export default function ScheduleGrid({ classes, onAddAt, onEdit, todayKey }: Pro
           const dayIdx = DAY_KEYS.indexOf(cls.day as (typeof DAY_KEYS)[number]);
           if (dayIdx < 0) return null;
           const span = Math.min(classDurationSlots(cls.start, cls.end), ROWS - startIdx);
-          const taskCount = cls.tasks.length;
+          const taskCount = pendingCountForClass(sharedTasks, cls.id, memberIds);
           const accent = ACCENT[cls.type] ?? ACCENT.lecture;
 
           return (

@@ -34,10 +34,24 @@ type MonthData struct {
 	Classes []ClassItem `json:"classes"`
 }
 
+type SharedTask struct {
+	ID            string          `json:"id"`
+	ClassID       string          `json:"classId"`
+	CourseName    string          `json:"courseName"`
+	Title         string          `json:"title"`
+	Detail        string          `json:"detail"`
+	Due           string          `json:"due"`
+	CreatedBy     string          `json:"createdBy"`
+	CreatedByName string          `json:"createdByName"`
+	CreatedAt     string          `json:"createdAt"`
+	DoneBy        map[string]bool `json:"doneBy"`
+}
+
 type Store struct {
-	mu     sync.Mutex
-	file   string
-	Months map[string]*MonthData `json:"months"`
+	mu          sync.Mutex
+	file        string
+	Months      map[string]*MonthData `json:"months"`
+	SharedTasks []SharedTask          `json:"sharedTasks"`
 }
 
 func newStore(file string) *Store {
@@ -47,6 +61,9 @@ func newStore(file string) *Store {
 	}
 	if s.Months == nil {
 		s.Months = map[string]*MonthData{}
+	}
+	if s.SharedTasks == nil {
+		s.SharedTasks = []SharedTask{}
 	}
 	return s
 }
@@ -111,6 +128,61 @@ func (s *Store) deleteClass(key, id string) MonthData {
 	return *m
 }
 
+func (s *Store) getSharedTasks() []SharedTask {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]SharedTask, len(s.SharedTasks))
+	copy(out, s.SharedTasks)
+	return out
+}
+
+func (s *Store) addSharedTask(t SharedTask) []SharedTask {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if t.DoneBy == nil {
+		t.DoneBy = map[string]bool{}
+	}
+	s.SharedTasks = append(s.SharedTasks, t)
+	s.persist()
+	out := make([]SharedTask, len(s.SharedTasks))
+	copy(out, s.SharedTasks)
+	return out
+}
+
+func (s *Store) toggleSharedTask(id, userId string, done bool) []SharedTask {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.SharedTasks {
+		if s.SharedTasks[i].ID == id {
+			if s.SharedTasks[i].DoneBy == nil {
+				s.SharedTasks[i].DoneBy = map[string]bool{}
+			}
+			s.SharedTasks[i].DoneBy[userId] = done
+			break
+		}
+	}
+	s.persist()
+	out := make([]SharedTask, len(s.SharedTasks))
+	copy(out, s.SharedTasks)
+	return out
+}
+
+func (s *Store) deleteSharedTask(id string) []SharedTask {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.SharedTasks[:0]
+	for _, t := range s.SharedTasks {
+		if t.ID != id {
+			out = append(out, t)
+		}
+	}
+	s.SharedTasks = out
+	s.persist()
+	result := make([]SharedTask, len(s.SharedTasks))
+	copy(result, s.SharedTasks)
+	return result
+}
+
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -120,7 +192,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -164,6 +236,59 @@ func main() {
 
 	mux.HandleFunc("DELETE /api/months/{key}/classes/{id}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, store.deleteClass(r.PathValue("key"), r.PathValue("id")))
+	})
+
+	// Per-user term storage (key = userId/termKey)
+	mux.HandleFunc("GET /api/users/{userId}/term/{termKey}", func(w http.ResponseWriter, r *http.Request) {
+		key := r.PathValue("userId") + "/" + r.PathValue("termKey")
+		writeJSON(w, http.StatusOK, store.getMonth(key))
+	})
+
+	mux.HandleFunc("PUT /api/users/{userId}/term/{termKey}/classes", func(w http.ResponseWriter, r *http.Request) {
+		var c ClassItem
+		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+			return
+		}
+		if c.Tasks == nil {
+			c.Tasks = []Task{}
+		}
+		key := r.PathValue("userId") + "/" + r.PathValue("termKey")
+		writeJSON(w, http.StatusOK, store.upsertClass(key, c))
+	})
+
+	mux.HandleFunc("DELETE /api/users/{userId}/term/{termKey}/classes/{id}", func(w http.ResponseWriter, r *http.Request) {
+		key := r.PathValue("userId") + "/" + r.PathValue("termKey")
+		writeJSON(w, http.StatusOK, store.deleteClass(key, r.PathValue("id")))
+	})
+
+	mux.HandleFunc("GET /api/shared/tasks", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.getSharedTasks())
+	})
+
+	mux.HandleFunc("POST /api/shared/tasks", func(w http.ResponseWriter, r *http.Request) {
+		var t SharedTask
+		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+			return
+		}
+		writeJSON(w, http.StatusOK, store.addSharedTask(t))
+	})
+
+	mux.HandleFunc("PATCH /api/shared/tasks/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			UserID string `json:"userId"`
+			Done   bool   `json:"done"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+			return
+		}
+		writeJSON(w, http.StatusOK, store.toggleSharedTask(r.PathValue("id"), body.UserID, body.Done))
+	})
+
+	mux.HandleFunc("DELETE /api/shared/tasks/{id}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.deleteSharedTask(r.PathValue("id")))
 	})
 
 	log.Printf("Physiot API listening on http://localhost:%s (data: %s)", port, dataFile)
